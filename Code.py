@@ -10,6 +10,11 @@ from fake_useragent import UserAgent
 import websockets  
 
 
+# Configure loguru to only log to the console and not create any log files
+logger.remove()  # Remove any existing handlers (like the file handler)
+logger.add(sys.stdout, level="DEBUG")  # Log only to the console
+
+
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=["windows", "macos", "linux"], browsers="chrome")
     random_user_agent = user_agent.random
@@ -133,5 +138,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    logger.add("debug.log", level="DEBUG")
     asyncio.run(main())
