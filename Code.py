@@ -4,11 +4,14 @@ import ssl
 import json
 import time
 import uuid
+import signal
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 import websockets  
-# Added missing import
+import aiohttp
+from urllib.parse import urlparse
+
 
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=["windows", "macos", "linux"], browsers="chrome")
@@ -134,10 +137,20 @@ async def main():
 
 if __name__ == "__main__":
     logger.add("debug.log", level="DEBUG")
-    
-    # Handle graceful shutdown on Ctrl+C (SIGINT)
+
+    # Gracefully handle shutdown when Ctrl+C is pressed
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Received exit signal. Closing gracefully.")
-        exit(0)  # Exit the program gracefully after handling Ctrl+C
+        # Get all running tasks and cancel them
+        tasks = asyncio.all_tasks()
+        for task in tasks:
+            task.cancel()  # Cancel all tasks
+
+        # Wait for all tasks to be properly cancelled and finished
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
+        # Exit cleanly
+        exit(0)
