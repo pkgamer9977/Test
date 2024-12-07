@@ -4,17 +4,17 @@ import ssl
 import json
 import time
 import uuid
-from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 import websockets  
 
+# Removed loguru logger initialization
 
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=["windows", "macos", "linux"], browsers="chrome")
     random_user_agent = user_agent.random
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
-    logger.info(f"Generated Device ID: {device_id}")
+    print(f"Generated Device ID: {device_id}")
 
     urilist = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
     server_hostname = "proxy2.wynd.network"
@@ -33,7 +33,7 @@ async def connect_to_wss(socks5_proxy, user_id):
             async with proxy_connect(
                 uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname, extra_headers=custom_headers
             ) as websocket:
-                logger.info(f"Connected to WebSocket: {uri}")
+                print(f"Connected to WebSocket: {uri}")
 
                 ping_task = asyncio.create_task(send_ping(websocket))
                 ping_task.add_done_callback(handle_task_exception)
@@ -41,12 +41,12 @@ async def connect_to_wss(socks5_proxy, user_id):
                 while True:
                     try:
                         if websocket.closed:
-                            logger.warning("WebSocket connection is closed. Reconnecting...")
+                            print("WebSocket connection is closed. Reconnecting...")
                             break
 
                         response = await websocket.recv()
                         message = json.loads(response)
-                        logger.info(f"Received message: {message}")
+                        print(f"Received message: {message}")
 
                         if message.get("action") == "AUTH":
                             auth_response = {
@@ -61,29 +61,29 @@ async def connect_to_wss(socks5_proxy, user_id):
                                     "version": "4.29.0",
                                 },
                             }
-                            logger.debug(f"Sending AUTH response: {auth_response}")
+                            print(f"Sending AUTH response: {auth_response}")
                             await websocket.send(json.dumps(auth_response))
 
                         elif message.get("action") == "PONG":
                             pong_response = {"id": message["id"], "origin_action": "PONG"}
-                            logger.debug(f"Sending PONG response: {pong_response}")
+                            print(f"Sending PONG response: {pong_response}")
                             await websocket.send(json.dumps(pong_response))
 
                     except websockets.ConnectionClosedError as e:
-                        logger.warning(f"WebSocket connection closed: {e}")
+                        print(f"WebSocket connection closed: {e}")
                         break
                     except asyncio.exceptions.CancelledError:
-                        logger.warning("Task was cancelled.")
+                        print("Task was cancelled.")
                         break
                     except Exception as e:
-                        logger.error(f"Unexpected error in WebSocket loop: {e}")
+                        print(f"Unexpected error in WebSocket loop: {e}")
                         break
 
         except websockets.InvalidStatusCode as e:
-            logger.error(f"WebSocket handshake failed with status code: {e.status_code}")
+            print(f"WebSocket handshake failed with status code: {e.status_code}")
             await asyncio.sleep(5)  # Retry delay
         except Exception as e:
-            logger.error(f"Error during WebSocket connection: {e}")
+            print(f"Error during WebSocket connection: {e}")
             await asyncio.sleep(5)  # Retry delay
 
 
@@ -93,22 +93,22 @@ async def send_ping(websocket):
             send_message = json.dumps(
                 {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}}
             )
-            logger.debug(f"Sending PING: {send_message}")
+            print(f"Sending PING: {send_message}")
             await websocket.send(send_message)
             await asyncio.sleep(5)  # Ping interval
     except websockets.ConnectionClosedError as e:
-        logger.error(f"WebSocket connection closed during PING: {e}")
+        print(f"WebSocket connection closed during PING: {e}")
     except asyncio.exceptions.CancelledError:
-        logger.warning("PING task was cancelled.")
+        print("PING task was cancelled.")
     except Exception as e:
-        logger.error(f"Unexpected error in send_ping: {e}")
+        print(f"Unexpected error in send_ping: {e}")
 
 
 def handle_task_exception(task):
     try:
         task.result()
     except Exception as e:
-        logger.error(f"Task exception: {e}")
+        print(f"Task exception: {e}")
 
 
 async def main():
@@ -118,7 +118,7 @@ async def main():
             proxies = file.read().splitlines()
 
         if not proxies:
-            logger.error("No proxies found in 'proxies.txt'. Exiting.")
+            print("No proxies found in 'proxies.txt'. Exiting.")
             return
 
         tasks = [
@@ -127,11 +127,10 @@ async def main():
         await asyncio.gather(*tasks)
 
     except FileNotFoundError:
-        logger.error("The 'proxies.txt' file was not found.")
+        print("The 'proxies.txt' file was not found.")
     except Exception as e:
-        logger.error(f"Unexpected error in main: {e}")
+        print(f"Unexpected error in main: {e}")
 
 
 if __name__ == "__main__":
-    logger.add("debug.log", level="DEBUG")
     asyncio.run(main())
