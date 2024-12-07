@@ -10,7 +10,6 @@ from fake_useragent import UserAgent
 import websockets  
 # Added missing import
 
-
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=["windows", "macos", "linux"], browsers="chrome")
     random_user_agent = user_agent.random
@@ -135,4 +134,10 @@ async def main():
 
 if __name__ == "__main__":
     logger.add("debug.log", level="DEBUG")
-    asyncio.run(main())
+    
+    # Handle graceful shutdown on Ctrl+C (SIGINT)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Received exit signal. Closing gracefully.")
+        exit(0)  # Exit the program gracefully after handling Ctrl+C
