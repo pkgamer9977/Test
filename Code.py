@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 import requests
+import websocket
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
