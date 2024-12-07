@@ -1,4 +1,3 @@
-
 import asyncio
 import random
 import ssl
@@ -9,7 +8,6 @@ from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 import websockets  
-# Added missing import
 
 
 async def connect_to_wss(socks5_proxy, user_id):
@@ -88,6 +86,7 @@ async def connect_to_wss(socks5_proxy, user_id):
             logger.error(f"Error during WebSocket connection: {e}")
             await asyncio.sleep(5)  # Retry delay
 
+
 async def send_ping(websocket):
     try:
         while True:
@@ -133,6 +132,6 @@ async def main():
         logger.error(f"Unexpected error in main: {e}")
 
 
-if name == "main":
+if __name__ == "__main__":
     logger.add("debug.log", level="DEBUG")
     asyncio.run(main())
