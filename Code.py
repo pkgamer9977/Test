@@ -8,10 +8,10 @@ import signal
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
-import websockets  
-import aiohttp
-from urllib.parse import urlparse
+import websockets
 
+# Global variable to signal shutdown
+stop_event = asyncio.Event()
 
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=["windows", "macos", "linux"], browsers="chrome")
@@ -22,7 +22,7 @@ async def connect_to_wss(socks5_proxy, user_id):
     urilist = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
     server_hostname = "proxy2.wynd.network"
 
-    while True:
+    while not stop_event.is_set():
         try:
             await asyncio.sleep(random.uniform(0.1, 1))  # Random delay before connecting
             custom_headers = {"User-Agent": random_user_agent}
@@ -38,15 +38,8 @@ async def connect_to_wss(socks5_proxy, user_id):
             ) as websocket:
                 logger.info(f"Connected to WebSocket: {uri}")
 
-                ping_task = asyncio.create_task(send_ping(websocket))
-                ping_task.add_done_callback(handle_task_exception)
-
-                while True:
+                while not stop_event.is_set():
                     try:
-                        if websocket.closed:
-                            logger.warning("WebSocket connection is closed. Reconnecting...")
-                            break
-
                         response = await websocket.recv()
                         message = json.loads(response)
                         logger.info(f"Received message: {message}")
@@ -75,7 +68,7 @@ async def connect_to_wss(socks5_proxy, user_id):
                     except websockets.ConnectionClosedError as e:
                         logger.warning(f"WebSocket connection closed: {e}")
                         break
-                    except asyncio.exceptions.CancelledError:
+                    except asyncio.CancelledError:
                         logger.warning("Task was cancelled.")
                         break
                     except Exception as e:
@@ -90,30 +83,6 @@ async def connect_to_wss(socks5_proxy, user_id):
             await asyncio.sleep(5)  # Retry delay
 
 
-async def send_ping(websocket):
-    try:
-        while True:
-            send_message = json.dumps(
-                {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}}
-            )
-            logger.debug(f"Sending PING: {send_message}")
-            await websocket.send(send_message)
-            await asyncio.sleep(5)  # Ping interval
-    except websockets.ConnectionClosedError as e:
-        logger.error(f"WebSocket connection closed during PING: {e}")
-    except asyncio.exceptions.CancelledError:
-        logger.warning("PING task was cancelled.")
-    except Exception as e:
-        logger.error(f"Unexpected error in send_ping: {e}")
-
-
-def handle_task_exception(task):
-    try:
-        task.result()
-    except Exception as e:
-        logger.error(f"Task exception: {e}")
-
-
 async def main():
     user_id = input("Please Enter your User ID: ")
     try:
@@ -124,9 +93,9 @@ async def main():
             logger.error("No proxies found in 'proxies.txt'. Exiting.")
             return
 
-        tasks = [
-            asyncio.create_task(connect_to_wss(proxy, user_id)) for proxy in proxies
-        ]
+        tasks = [connect_to_wss(proxy, user_id) for proxy in proxies]
+
+        # Run all tasks until stop_event is set
         await asyncio.gather(*tasks)
 
     except FileNotFoundError:
@@ -135,22 +104,27 @@ async def main():
         logger.error(f"Unexpected error in main: {e}")
 
 
+def handle_shutdown():
+    """Set the stop_event and stop all tasks."""
+    logger.info("Received exit signal. Shutting down...")
+    stop_event.set()
+
+
 if __name__ == "__main__":
     logger.add("debug.log", level="DEBUG")
 
-    # Gracefully handle shutdown when Ctrl+C is pressed
+    # Setup signal handlers for Ctrl+C and termination signals
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, handle_shutdown)
+
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Received exit signal. Closing gracefully.")
-        # Get all running tasks and cancel them
-        tasks = asyncio.all_tasks()
+        loop.run_until_complete(main())
+    finally:
+        # Cancel all tasks and clean up
+        tasks = asyncio.all_tasks(loop=loop)
         for task in tasks:
-            task.cancel()  # Cancel all tasks
-
-        # Wait for all tasks to be properly cancelled and finished
-        loop = asyncio.get_event_loop()
+            task.cancel()
         loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
-
-        # Exit cleanly
-        exit(0)
+        loop.close()
+        logger.info("Program terminated cleanly.")
