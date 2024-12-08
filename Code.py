@@ -4,18 +4,12 @@ import ssl
 import json
 import time
 import uuid
-import signal
+import requests
+import websockets
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
-import websockets
 
-# Graceful shutdown handler
-stop_event = asyncio.Event()
-
-def shutdown():
-    logger.info("Shutting down gracefully...")
-    stop_event.set()
 
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=['windows', 'macos', 'linux'], browsers='chrome')
@@ -25,27 +19,30 @@ async def connect_to_wss(socks5_proxy, user_id):
 
     urilist = ["wss://proxy2.wynd.network:4444/", "wss://proxy2.wynd.network:4650/"]
     server_hostname = "proxy2.wynd.network"
-
-    while not stop_event.is_set():
+    
+    while True:
         try:
             await asyncio.sleep(random.uniform(0.1, 1))  # Random delay before connecting
             custom_headers = {"User-Agent": random_user_agent}
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-
+            
             uri = random.choice(urilist)
             proxy = Proxy.from_url(socks5_proxy)
 
             async with proxy_connect(
                 uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname, extra_headers=custom_headers
             ) as websocket:
+                
                 logger.info(f"Connected to WebSocket: {uri}")
-
+                
+                # Start the PING task
                 ping_task = asyncio.create_task(send_ping(websocket))
                 ping_task.add_done_callback(handle_task_exception)
-
-                while not stop_event.is_set():
+                
+                # Main WebSocket loop
+                while True:
                     try:
                         if websocket.closed:
                             logger.warning("WebSocket connection is closed. Reconnecting...")
@@ -96,7 +93,7 @@ async def connect_to_wss(socks5_proxy, user_id):
 
 async def send_ping(websocket):
     try:
-        while not stop_event.is_set():
+        while True:
             send_message = json.dumps(
                 {"id": str(uuid.uuid4()), "version": "1.0.0", "action": "PING", "data": {}}
             )
@@ -123,12 +120,8 @@ async def main():
             proxies = file.read().splitlines()
 
         tasks = [
-            connect_to_wss(proxy, user_id) for proxy in proxies
+            asyncio.create_task(connect_to_wss(proxy, user_id)) for proxy in proxies
         ]
-
-        # Add stop_event to allow graceful shutdown with Ctrl+C
-        tasks.append(stop_event.wait())
-
         await asyncio.gather(*tasks)
 
     except FileNotFoundError:
@@ -138,15 +131,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-
-    # Register signal handlers for Ctrl+C
-    loop.add_signal_handler(signal.SIGINT, shutdown)
-    loop.add_signal_handler(signal.SIGTERM, shutdown)
-
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Program interrupted manually.")
-    except Exception as e:
-        logger.error(f"Unhandled exception: {e}")
+    asyncio.run(main())
