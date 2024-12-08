@@ -4,12 +4,19 @@ import ssl
 import json
 import time
 import uuid
-import requests
-import websockets
+import signal
+import sys
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
+import websockets
 
+# Graceful shutdown handler
+def shutdown(loop, signal=None):
+    logger.info("Shutting down gracefully...")
+    for task in asyncio.all_tasks(loop):
+        task.cancel()
+    loop.stop()
 
 async def connect_to_wss(socks5_proxy, user_id):
     user_agent = UserAgent(os=['windows', 'macos', 'linux'], browsers='chrome')
@@ -131,4 +138,9 @@ async def main():
 
 
 if __name__ == "__main__":
+    # Register signal handlers for graceful shutdown on Ctrl+C
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGINT, shutdown, loop)
+    loop.add_signal_handler(signal.SIGTERM, shutdown, loop)
+    
     asyncio.run(main())
