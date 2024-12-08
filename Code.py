@@ -5,7 +5,6 @@ import json
 import time
 import uuid
 import requests
-import websockets
 from loguru import logger
 from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
@@ -89,7 +88,6 @@ async def connect_to_wss(socks5_proxy, user_id):
         except Exception as e:
             logger.error(f"Error during WebSocket connection: {e}")
             await asyncio.sleep(5)  # Reconnect delay
-
 
 async def send_ping(websocket):
     try:
